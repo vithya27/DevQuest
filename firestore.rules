@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, email, displayName, photoURL, points, role, completedArticles
+    //
+    // Collection: roadmaps
+    // Fields: title, description, icon, order
+    //
+    // Collection: articles
+    // Fields: roadmapId, title, content, points, order
+    //
+    // Collection: quizzes
+    // Fields: articleId, questions[]
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'points', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.points is number &&
+             data.role in ['admin', 'user'];
+    }
+
+    // Rules
+    match /users/{userId} {
+      // Allow users to read their own profile
+      allow read: if isOwner(userId);
+      // Allow admins to read any profile
+      allow read: if isAdmin();
+      // Allow authenticated users to list profiles for the leaderboard
+      allow list: if isAuthenticated();
+      
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+    }
+
+    match /_connection_test_/{docId} {
+      allow read: if true;
+    }
+
+    match /roadmaps/{roadmapId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /quizzes/{quizId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

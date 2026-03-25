@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-text);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-text);
+}
+
+:root {
+  --bg: #ffffff;
+  --text: #09090b;
+  --card: #f4f4f5;
+  --card-text: #18181b;
+  --border: #e4e4e7;
+  --muted: #f4f4f5;
+  --muted-text: #71717a;
+}
+
+.dark {
+  --bg: #09090b;
+  --text: #f4f4f5;
+  --card: #18181b;
+  --card-text: #f4f4f5;
+  --border: #27272a;
+  --muted: #18181b;
+  --muted-text: #a1a1aa;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground transition-colors duration-300;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full border-2 border-background hover:bg-muted-foreground transition-colors;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-emerald-500/30 text-emerald-600 dark:text-emerald-200;
+  }
+}
+
+@layer components {
+  .prose h1, .prose h2, .prose h3 {
+    @apply text-foreground font-bold tracking-tight;
+  }
+  
+  .prose p {
+    @apply text-muted-foreground leading-relaxed;
+  }
+
+  .prose code {
+    @apply bg-muted text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-mono text-sm;
+  }
+
+  .prose pre {
+    @apply bg-card border border-border rounded-2xl p-6 overflow-x-auto;
+  }
+
+  .prose ul {
+    @apply list-disc list-inside space-y-2 text-muted-foreground;
+  }
+}

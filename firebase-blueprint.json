@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and progress",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "points": { "type": "number" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "completedArticles": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "email", "points", "role"]
+    },
+    "Roadmap": {
+      "title": "Roadmap",
+      "description": "A learning path (e.g., React, TypeScript)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["title", "order"]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "A learning step within a roadmap",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roadmapId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "points": { "type": "number" },
+        "order": { "type": "number" }
+      },
+      "required": ["roadmapId", "title", "content", "points", "order"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Quiz associated with an article",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "articleId": { "type": "string" },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "question": { "type": "string" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "correctAnswer": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["articleId", "questions"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/roadmaps/{roadmapId}": {
+      "schema": "Roadmap",
+      "description": "Learning roadmaps"
+    },
+    "/articles/{articleId}": {
+      "schema": "Article",
+      "description": "Articles for roadmaps"
+    },
+    "/quizzes/{quizId}": {
+      "schema": "Quiz",
+      "description": "Quizzes for articles"
+    }
+  }
+}
