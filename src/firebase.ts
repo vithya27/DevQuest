@@ -1,4 +1,4 @@
-import { initializeApp, type FirebaseOptions } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -6,37 +6,29 @@ import {
   signOut,
 } from "firebase/auth";
 import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
-import firebaseConfig from "../firebase-applet-config.json";
-
-type FirebaseAppletConfig = FirebaseOptions & {
-  firestoreDatabaseId?: string;
+const resolvedConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const isPlaceholderValue = (value: unknown): value is string =>
-  typeof value === "string" && value.startsWith("NEXT_PUBLIC_");
+const firestoreDatabaseId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID;
 
-const resolveConfigValue = (value: unknown) => {
-  if (isPlaceholderValue(value)) {
-    return process.env[value] ?? value;
-  }
-  return value;
-};
-
-const resolvedConfig: FirebaseAppletConfig = {
-  ...(firebaseConfig as FirebaseAppletConfig),
-  projectId: resolveConfigValue(firebaseConfig.projectId) as string,
-  appId: resolveConfigValue(firebaseConfig.appId) as string,
-  apiKey: resolveConfigValue(firebaseConfig.apiKey) as string,
-  authDomain: resolveConfigValue(firebaseConfig.authDomain) as string,
-  storageBucket: resolveConfigValue(firebaseConfig.storageBucket) as string,
-  messagingSenderId: resolveConfigValue(
-    firebaseConfig.messagingSenderId,
-  ) as string,
-  measurementId: resolveConfigValue(firebaseConfig.measurementId) as string,
-  firestoreDatabaseId: resolveConfigValue(
-    firebaseConfig.firestoreDatabaseId,
-  ) as string | undefined,
-};
+if (
+  typeof window !== "undefined" &&
+  (!resolvedConfig.apiKey ||
+    !resolvedConfig.authDomain ||
+    !resolvedConfig.projectId ||
+    !resolvedConfig.appId)
+) {
+  console.error(
+    "Firebase env vars are missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, and NEXT_PUBLIC_FIREBASE_APP_ID.",
+  );
+}
 
 const app = initializeApp(resolvedConfig);
 export const auth = getAuth(app);
@@ -45,15 +37,9 @@ export const auth = getAuth(app);
 // If it fails or is missing, it might be the default database
 let dbInstance;
 try {
-  if (
-    resolvedConfig.firestoreDatabaseId &&
-    resolvedConfig.firestoreDatabaseId !== "(default)" &&
-    !isPlaceholderValue(resolvedConfig.firestoreDatabaseId)
-  ) {
-    dbInstance = getFirestore(app, resolvedConfig.firestoreDatabaseId);
-    console.log(
-      `Firestore initialized with database: ${resolvedConfig.firestoreDatabaseId}`,
-    );
+  if (firestoreDatabaseId && firestoreDatabaseId !== "(default)") {
+    dbInstance = getFirestore(app, firestoreDatabaseId);
+    console.log(`Firestore initialized with database: ${firestoreDatabaseId}`);
   } else {
     dbInstance = getFirestore(app);
     console.log("Firestore initialized with default database.");
@@ -90,11 +76,16 @@ async function testConnection() {
   }
 }
 
-const hasValidProjectId =
-  !!resolvedConfig.projectId && !isPlaceholderValue(resolvedConfig.projectId);
+const hasValidProjectId = !!resolvedConfig.projectId;
 
-if (typeof window !== "undefined" && hasValidProjectId) {
+const hasValidApiKey = !!resolvedConfig.apiKey;
+
+if (typeof window !== "undefined" && hasValidProjectId && hasValidApiKey) {
   void testConnection();
+} else if (typeof window !== "undefined" && !hasValidApiKey) {
+  console.error(
+    "Firebase API key is missing. Ensure NEXT_PUBLIC_FIREBASE_API_KEY is set and restart the Next.js dev server.",
+  );
 }
 
 export enum OperationType {

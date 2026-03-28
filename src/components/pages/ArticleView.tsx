@@ -1,30 +1,40 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../firebase';
-import { Article, Quiz, UserProfile } from '../../types';
-import { motion } from 'framer-motion';
-import { useUser } from '../../contexts/UserContext';
-import { 
-  ChevronLeft, 
-  BookOpen, 
-  Trophy, 
-  PlayCircle, 
+import React, { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "../../firebase";
+import { Article, Quiz, UserProfile } from "../../types";
+import { motion } from "framer-motion";
+import { useUser } from "../../contexts/UserContext";
+import {
+  ChevronLeft,
+  BookOpen,
+  Trophy,
+  PlayCircle,
   CheckCircle2,
   Clock,
-  Share2
-} from 'lucide-react';
-import QuizModal from '../../components/QuizModal';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { atomDark, prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useTheme } from '../../contexts/ThemeContext';
+  Share2,
+} from "lucide-react";
+import QuizModal from "../../components/QuizModal";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import {
+  atomDark,
+  prism,
+} from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useTheme } from "../../contexts/ThemeContext";
 
 export default function ArticleView() {
-  const { profile } = useUser();
+  const { profile, loading: authLoading } = useUser();
   const params = useParams();
   const id = params?.id as string;
   const router = useRouter();
@@ -35,42 +45,61 @@ export default function ArticleView() {
   const { theme } = useTheme();
 
   useEffect(() => {
-    if (!id) return;
+    if (authLoading || profile || !id) return;
+    router.replace(`/profile?redirect=${encodeURIComponent(`/article/${id}`)}`);
+  }, [authLoading, profile, id, router]);
+
+  useEffect(() => {
+    if (!id || authLoading || !profile) return;
 
     const fetchData = async () => {
       try {
-        const docRef = doc(db, 'articles', id);
+        const docRef = doc(db, "articles", id);
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
           const articleData = { id: docSnap.id, ...docSnap.data() } as Article;
           setArticle(articleData);
 
           // Fetch associated quiz
-          const q = query(collection(db, 'quizzes'), where('articleId', '==', id));
+          const q = query(
+            collection(db, "quizzes"),
+            where("articleId", "==", id),
+          );
           const quizSnap = await getDocs(q);
           if (!quizSnap.empty) {
-            setQuiz({ id: quizSnap.docs[0].id, ...quizSnap.docs[0].data() } as Quiz);
+            setQuiz({
+              id: quizSnap.docs[0].id,
+              ...quizSnap.docs[0].data(),
+            } as Quiz);
           }
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.GET, 'articles/' + id);
+        handleFirestoreError(error, OperationType.GET, "articles/" + id);
       }
       setLoading(false);
     };
 
     fetchData();
-  }, [id]);
+  }, [id, authLoading, profile]);
 
-  if (loading) return <div className="py-20 text-center">Loading article...</div>;
-  if (!article) return <div className="py-20 text-center">Article not found.</div>;
+  if (authLoading || !profile)
+    return <div className="py-20 text-center">Redirecting to sign in...</div>;
+
+  if (loading)
+    return <div className="py-20 text-center">Loading article...</div>;
+  if (!article)
+    return <div className="py-20 text-center">Article not found.</div>;
 
   const isCompleted = profile?.completedArticles.includes(article.id);
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <Link href={`/roadmap/${article.roadmapId}`} className="inline-flex items-center gap-2 text-muted-foreground hover:text-emerald-500 transition-colors">
+        <Link
+          href={`/roadmap/${article.roadmapId}`}
+          className="inline-flex items-center gap-2 text-muted-foreground hover:text-emerald-500 transition-colors"
+        >
           <ChevronLeft className="w-4 h-4" /> Back to Roadmap
         </Link>
         <div className="flex items-center gap-2">
@@ -110,15 +139,15 @@ export default function ArticleView() {
             <ReactMarkdown
               components={{
                 code({ node, inline, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || '');
+                  const match = /language-(\w+)/.exec(className || "");
                   return !inline && match ? (
                     <SyntaxHighlighter
-                      style={theme === 'dark' ? atomDark : prism}
+                      style={theme === "dark" ? atomDark : prism}
                       language={match[1]}
                       PreTag="div"
                       {...props}
                     >
-                      {String(children).replace(/\n$/, '')}
+                      {String(children).replace(/\n$/, "")}
                     </SyntaxHighlighter>
                   ) : (
                     <code className={className} {...props}>
@@ -142,7 +171,8 @@ export default function ArticleView() {
               </div>
               <h2 className="text-3xl font-bold">Ready for the Quiz?</h2>
               <p className="text-muted-foreground max-w-md mx-auto">
-                Test your knowledge and earn {article.points} XP to level up your profile.
+                Test your knowledge and earn {article.points} XP to level up
+                your profile.
               </p>
               <div className="pt-6">
                 {quiz ? (
@@ -153,7 +183,9 @@ export default function ArticleView() {
                     <PlayCircle className="w-6 h-6" /> Start Knowledge Check
                   </button>
                 ) : (
-                  <p className="text-muted-foreground italic">No quiz available for this article yet.</p>
+                  <p className="text-muted-foreground italic">
+                    No quiz available for this article yet.
+                  </p>
                 )}
               </div>
             </div>
