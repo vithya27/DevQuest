@@ -30,7 +30,16 @@ import {
   X,
   AlertCircle,
   Upload,
+  Eye,
+  Trophy,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import {
+  atomDark,
+  prism,
+} from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useTheme } from "../../contexts/ThemeContext";
 
 type ImportedQuizQuestion = {
   question: string;
@@ -198,6 +207,7 @@ const parseImportRoadmaps = (input: unknown): ImportedRoadmap[] => {
 
 export default function AdminPortal() {
   const { profile } = useUser();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<
     "roadmaps" | "articles" | "quizzes"
   >("roadmaps");
@@ -894,7 +904,7 @@ export default function AdminPortal() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-2xl bg-card border border-border rounded-3xl overflow-hidden shadow-2xl"
+              className={`w-full ${activeTab === "articles" || activeTab === "quizzes" ? "max-w-5xl" : "max-w-2xl"} bg-card border border-border rounded-3xl overflow-hidden shadow-2xl`}
             >
               <div className="p-6 border-b border-border flex items-center justify-between">
                 <h3 className="font-bold text-xl capitalize">
@@ -911,7 +921,13 @@ export default function AdminPortal() {
                 </button>
               </div>
 
-              <div className="p-8 max-h-[70vh] overflow-y-auto">
+              <div
+                className={
+                  activeTab === "articles" || activeTab === "quizzes"
+                    ? "flex max-h-[75vh] overflow-hidden"
+                    : "p-8 max-h-[70vh] overflow-y-auto"
+                }
+              >
                 {activeTab === "roadmaps" && (
                   <form onSubmit={handleAddRoadmap} className="space-y-6">
                     <div className="space-y-2">
@@ -1029,263 +1045,403 @@ export default function AdminPortal() {
                 )}
 
                 {activeTab === "articles" && (
-                  <form onSubmit={handleAddArticle} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                        Roadmap
-                      </label>
-                      <select
-                        required
-                        value={articleForm.roadmapId}
-                        onChange={(e) =>
-                          setArticleForm({
-                            ...articleForm,
-                            roadmapId: e.target.value,
-                          })
-                        }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                      >
-                        <option value="">Select a Roadmap</option>
-                        {roadmaps.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.title}
-                          </option>
-                        ))}
-                      </select>
+                  <>
+                    <div className="flex-1 min-w-0 p-8 overflow-y-auto">
+                      <form onSubmit={handleAddArticle} className="space-y-6">
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                            Roadmap
+                          </label>
+                          <select
+                            required
+                            value={articleForm.roadmapId}
+                            onChange={(e) =>
+                              setArticleForm({
+                                ...articleForm,
+                                roadmapId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                          >
+                            <option value="">Select a Roadmap</option>
+                            {roadmaps.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                            Title
+                          </label>
+                          <input
+                            required
+                            value={articleForm.title}
+                            onChange={(e) =>
+                              setArticleForm({
+                                ...articleForm,
+                                title: e.target.value,
+                              })
+                            }
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                            placeholder="e.g. Introduction to Hooks"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                              Content
+                            </label>
+                            <span className="text-[10px] font-bold text-emerald-500/50 uppercase tracking-widest">
+                              Markdown Supported
+                            </span>
+                          </div>
+                          <textarea
+                            required
+                            value={articleForm.content}
+                            onChange={(e) =>
+                              setArticleForm({
+                                ...articleForm,
+                                content: e.target.value,
+                              })
+                            }
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-50 font-mono text-sm"
+                            placeholder="Write your article content here... Use ```lang for code blocks."
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                              Points (XP)
+                            </label>
+                            <input
+                              type="number"
+                              value={articleForm.points}
+                              onChange={(e) =>
+                                setArticleForm({
+                                  ...articleForm,
+                                  points: parseInt(e.target.value),
+                                })
+                              }
+                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                              Level
+                            </label>
+                            <input
+                              type="number"
+                              value={articleForm.level}
+                              onChange={(e) =>
+                                setArticleForm({
+                                  ...articleForm,
+                                  level: parseInt(e.target.value),
+                                })
+                              }
+                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                              Order
+                            </label>
+                            <input
+                              type="number"
+                              value={articleForm.order}
+                              onChange={(e) =>
+                                setArticleForm({
+                                  ...articleForm,
+                                  order: parseInt(e.target.value),
+                                })
+                              }
+                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full py-4 bg-emerald-500 text-zinc-950 rounded-2xl font-bold text-lg flex items-center justify-center gap-2"
+                        >
+                          <Save className="w-5 h-5" />{" "}
+                          {editingId ? "Update" : "Save"} Article
+                        </button>
+                      </form>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                        Title
-                      </label>
-                      <input
-                        required
-                        value={articleForm.title}
-                        onChange={(e) =>
-                          setArticleForm({
-                            ...articleForm,
-                            title: e.target.value,
-                          })
-                        }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                        placeholder="e.g. Introduction to Hooks"
-                      />
+
+                    <div className="w-105 shrink-0 border-l border-border bg-muted/20 overflow-y-auto p-8 space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 pb-3 border-b border-border">
+                        <Eye className="w-3.5 h-3.5" /> Live Preview
+                      </h4>
+                      {!articleForm.title && !articleForm.content ? (
+                        <p className="text-muted-foreground/50 text-sm italic text-center py-12">
+                          Start writing to see a preview...
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {articleForm.title && (
+                            <h1 className="text-2xl font-bold tracking-tight leading-tight">
+                              {articleForm.title}
+                            </h1>
+                          )}
+                          <div className="inline-flex items-center gap-1.5 text-emerald-500 font-mono font-bold text-sm">
+                            <Trophy className="w-4 h-4" /> {articleForm.points}{" "}
+                            XP
+                          </div>
+                          <div className="prose prose-sm prose-emerald max-w-none">
+                            <div className="markdown-body text-foreground/90 leading-relaxed space-y-3">
+                              <ReactMarkdown
+                                components={{
+                                  code({
+                                    node,
+                                    inline,
+                                    className,
+                                    children,
+                                    ...props
+                                  }: any) {
+                                    const match = /language-(\w+)/.exec(
+                                      className || "",
+                                    );
+                                    return !inline && match ? (
+                                      <SyntaxHighlighter
+                                        style={
+                                          theme === "dark" ? atomDark : prism
+                                        }
+                                        language={match[1]}
+                                        PreTag="div"
+                                        {...props}
+                                      >
+                                        {String(children).replace(/\n$/, "")}
+                                      </SyntaxHighlighter>
+                                    ) : (
+                                      <code className={className} {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                }}
+                              >
+                                {articleForm.content || ""}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                          Content
-                        </label>
-                        <span className="text-[10px] font-bold text-emerald-500/50 uppercase tracking-widest">
-                          Markdown Supported
-                        </span>
-                      </div>
-                      <textarea
-                        required
-                        value={articleForm.content}
-                        onChange={(e) =>
-                          setArticleForm({
-                            ...articleForm,
-                            content: e.target.value,
-                          })
-                        }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-50 font-mono text-sm"
-                        placeholder="Write your article content here... Use ```lang for code blocks."
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                          Points (XP)
-                        </label>
-                        <input
-                          type="number"
-                          value={articleForm.points}
-                          onChange={(e) =>
-                            setArticleForm({
-                              ...articleForm,
-                              points: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                          Level
-                        </label>
-                        <input
-                          type="number"
-                          value={articleForm.level}
-                          onChange={(e) =>
-                            setArticleForm({
-                              ...articleForm,
-                              level: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                          Order
-                        </label>
-                        <input
-                          type="number"
-                          value={articleForm.order}
-                          onChange={(e) =>
-                            setArticleForm({
-                              ...articleForm,
-                              order: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full py-4 bg-emerald-500 text-zinc-950 rounded-2xl font-bold text-lg flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-5 h-5" />{" "}
-                      {editingId ? "Update" : "Save"} Article
-                    </button>
-                  </form>
+                  </>
                 )}
 
                 {activeTab === "quizzes" && (
-                  <form onSubmit={handleAddQuiz} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-                        Article
-                      </label>
-                      <select
-                        required
-                        value={quizForm.articleId}
-                        onChange={(e) =>
-                          setQuizForm({
-                            ...quizForm,
-                            articleId: e.target.value,
-                          })
-                        }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-                      >
-                        <option value="">Select an Article</option>
-                        {articles.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <>
+                    <div className="flex-1 min-w-0 p-8 overflow-y-auto">
+                      <form onSubmit={handleAddQuiz} className="space-y-6">
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                            Article
+                          </label>
+                          <select
+                            required
+                            value={quizForm.articleId}
+                            onChange={(e) =>
+                              setQuizForm({
+                                ...quizForm,
+                                articleId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                          >
+                            <option value="">Select an Article</option>
+                            {articles.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div className="space-y-8 border-t border-border pt-6">
-                      {quizForm.questions.map((q, qIdx) => (
-                        <div
-                          key={qIdx}
-                          className="space-y-4 p-4 bg-muted/50 rounded-2xl border border-border relative group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-emerald-500">
-                              Question {qIdx + 1}
-                            </h4>
-                            {quizForm.questions.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const qs = [...quizForm.questions];
-                                  qs.splice(qIdx, 1);
-                                  setQuizForm({ ...quizForm, questions: qs });
-                                }}
-                                className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                                Question Text
-                              </label>
-                              <span className="text-[9px] font-bold text-emerald-500/50 uppercase tracking-widest">
-                                Markdown Supported
-                              </span>
-                            </div>
-                            <textarea
-                              required
-                              value={q.question}
-                              onChange={(e) => {
-                                const qs = [...quizForm.questions];
-                                qs[qIdx].question = e.target.value;
-                                setQuizForm({ ...quizForm, questions: qs });
-                              }}
-                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-20 font-mono text-sm"
-                              placeholder="e.g. What is the output of `console.log(typeof [])`?"
-                            />
-                          </div>
-                          <div className="grid gap-3">
-                            {q.options.map((opt, optIdx) => (
-                              <div
-                                key={optIdx}
-                                className="flex items-center gap-3"
-                              >
-                                <input
-                                  type="radio"
-                                  name={`correct-${qIdx}`}
-                                  checked={q.correctAnswer === optIdx}
-                                  onChange={() => {
-                                    const qs = [...quizForm.questions];
-                                    qs[qIdx].correctAnswer = optIdx;
-                                    setQuizForm({ ...quizForm, questions: qs });
-                                  }}
-                                  className="w-5 h-5 accent-emerald-500"
-                                />
-                                <input
+                        <div className="space-y-8 border-t border-border pt-6">
+                          {quizForm.questions.map((q, qIdx) => (
+                            <div
+                              key={qIdx}
+                              className="space-y-4 p-4 bg-muted/50 rounded-2xl border border-border relative group"
+                            >
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-bold text-emerald-500">
+                                  Question {qIdx + 1}
+                                </h4>
+                                {quizForm.questions.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const qs = [...quizForm.questions];
+                                      qs.splice(qIdx, 1);
+                                      setQuizForm({
+                                        ...quizForm,
+                                        questions: qs,
+                                      });
+                                    }}
+                                    className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                                    Question Text
+                                  </label>
+                                  <span className="text-[9px] font-bold text-emerald-500/50 uppercase tracking-widest">
+                                    Markdown Supported
+                                  </span>
+                                </div>
+                                <textarea
                                   required
-                                  value={opt}
+                                  value={q.question}
                                   onChange={(e) => {
                                     const qs = [...quizForm.questions];
-                                    qs[qIdx].options[optIdx] = e.target.value;
+                                    qs[qIdx].question = e.target.value;
                                     setQuizForm({ ...quizForm, questions: qs });
                                   }}
-                                  className="flex-1 bg-muted border border-border rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 transition-colors"
-                                  placeholder={`Option ${optIdx + 1}`}
+                                  className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-20 font-mono text-sm"
+                                  placeholder="e.g. What is the output of `console.log(typeof [])`?"
                                 />
                               </div>
-                            ))}
-                          </div>
+                              <div className="grid gap-3">
+                                {q.options.map((opt, optIdx) => (
+                                  <div
+                                    key={optIdx}
+                                    className="flex items-center gap-3"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`correct-${qIdx}`}
+                                      checked={q.correctAnswer === optIdx}
+                                      onChange={() => {
+                                        const qs = [...quizForm.questions];
+                                        qs[qIdx].correctAnswer = optIdx;
+                                        setQuizForm({
+                                          ...quizForm,
+                                          questions: qs,
+                                        });
+                                      }}
+                                      className="w-5 h-5 accent-emerald-500"
+                                    />
+                                    <input
+                                      required
+                                      value={opt}
+                                      onChange={(e) => {
+                                        const qs = [...quizForm.questions];
+                                        qs[qIdx].options[optIdx] =
+                                          e.target.value;
+                                        setQuizForm({
+                                          ...quizForm,
+                                          questions: qs,
+                                        });
+                                      }}
+                                      className="flex-1 bg-muted border border-border rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 transition-colors"
+                                      placeholder={`Option ${optIdx + 1}`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuizForm({
+                              ...quizForm,
+                              questions: [
+                                ...quizForm.questions,
+                                {
+                                  question: "",
+                                  options: ["", "", "", ""],
+                                  correctAnswer: 0,
+                                },
+                              ],
+                            })
+                          }
+                          className="w-full py-3 border-2 border-dashed border-border text-muted-foreground hover:text-emerald-500 hover:border-emerald-500/50 rounded-2xl font-bold transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus className="w-5 h-5" /> Add Another Question
+                        </button>
+
+                        <button
+                          type="submit"
+                          className="w-full py-4 bg-emerald-500 text-zinc-950 rounded-2xl font-bold text-lg flex items-center justify-center gap-2"
+                        >
+                          <Save className="w-5 h-5" />{" "}
+                          {editingId ? "Update" : "Save"} Quiz
+                        </button>
+                      </form>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQuizForm({
-                          ...quizForm,
-                          questions: [
-                            ...quizForm.questions,
-                            {
-                              question: "",
-                              options: ["", "", "", ""],
-                              correctAnswer: 0,
-                            },
-                          ],
-                        })
-                      }
-                      className="w-full py-3 border-2 border-dashed border-border text-muted-foreground hover:text-emerald-500 hover:border-emerald-500/50 rounded-2xl font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-5 h-5" /> Add Another Question
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="w-full py-4 bg-emerald-500 text-zinc-950 rounded-2xl font-bold text-lg flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-5 h-5" />{" "}
-                      {editingId ? "Update" : "Save"} Quiz
-                    </button>
-                  </form>
+                    <div className="w-105 shrink-0 border-l border-border bg-muted/20 overflow-y-auto p-8 space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 pb-3 border-b border-border">
+                        <Eye className="w-3.5 h-3.5" /> Quiz Preview
+                      </h4>
+                      {quizForm.questions.every((q) => !q.question) ? (
+                        <p className="text-muted-foreground/50 text-sm italic text-center py-12">
+                          Add questions to see a preview...
+                        </p>
+                      ) : (
+                        <div className="space-y-6">
+                          {quizForm.questions.map((q, idx) => (
+                            <div key={idx} className="space-y-3">
+                              <div className="flex items-start gap-2">
+                                <span className="text-xs font-bold text-emerald-500 mt-0.5 shrink-0">
+                                  Q{idx + 1}
+                                </span>
+                                <p className="font-medium text-sm leading-relaxed">
+                                  {q.question || (
+                                    <span className="italic text-muted-foreground">
+                                      No question text
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="space-y-2 pl-5">
+                                {q.options.map((opt, optIdx) => (
+                                  <div
+                                    key={optIdx}
+                                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-sm ${
+                                      optIdx === q.correctAnswer
+                                        ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-500 font-semibold"
+                                        : "bg-muted border-border text-muted-foreground"
+                                    }`}
+                                  >
+                                    <div
+                                      className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
+                                        optIdx === q.correctAnswer
+                                          ? "border-emerald-500 bg-emerald-500"
+                                          : "border-border"
+                                      }`}
+                                    />
+                                    <span>
+                                      {opt || (
+                                        <span className="italic opacity-40">
+                                          Empty
+                                        </span>
+                                      )}
+                                    </span>
+                                    {optIdx === q.correctAnswer && (
+                                      <span className="ml-auto text-[10px] font-bold uppercase tracking-wider">
+                                        ✓ Correct
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </motion.div>

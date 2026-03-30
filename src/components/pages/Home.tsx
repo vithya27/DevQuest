@@ -5,7 +5,7 @@ import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../firebase";
 import { Roadmap, UserProfile, Article } from "../../types";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "../../contexts/UserContext";
 import RoadmapIcon from "../RoadmapIcon";
 import {
@@ -16,11 +16,26 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+const ROTATING_WORDS = [
+  "Frontend Engineering",
+  "Backend Engineering",
+  "Cloud Engineering",
+  "Product Management",
+];
+
 export default function Home() {
   const { profile } = useUser();
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wordIndex, setWordIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setWordIndex((i) => (i + 1) % ROTATING_WORDS.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const unsubRoadmaps = onSnapshot(
@@ -67,7 +82,7 @@ export default function Home() {
   return (
     <div className="space-y-12">
       {/* Hero Section */}
-      <section className="relative py-20 overflow-hidden rounded-3xl bg-card border border-border">
+      <section className="relative pt-20 pb-8 overflow-hidden rounded-3xl bg-card border border-border">
         <div className="absolute inset-0 bg-linear-to-br from-emerald-500/10 via-transparent to-transparent" />
         <div className="relative z-10 px-8 md:px-12 text-center md:text-left max-w-3xl">
           <motion.div
@@ -83,8 +98,21 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-4xl md:text-6xl font-bold tracking-tight mb-6"
           >
-            Master Software{" "}
-            <span className="text-emerald-500">Development</span>
+            Master{" "}
+            <span className="inline-block relative">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={wordIndex}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.35, ease: "easeInOut" }}
+                  className="inline-block text-emerald-500"
+                >
+                  {ROTATING_WORDS[wordIndex]}
+                </motion.span>
+              </AnimatePresence>
+            </span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
