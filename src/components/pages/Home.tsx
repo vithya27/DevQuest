@@ -7,9 +7,9 @@ import { Roadmap, UserProfile, Article } from "../../types";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useUser } from "../../contexts/UserContext";
+import RoadmapIcon from "../RoadmapIcon";
 import {
   ChevronRight,
-  Map as MapIcon,
   BookOpen,
   Trophy,
   Star,
@@ -68,7 +68,7 @@ export default function Home() {
     <div className="space-y-12">
       {/* Hero Section */}
       <section className="relative py-20 overflow-hidden rounded-3xl bg-card border border-border">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-br from-emerald-500/10 via-transparent to-transparent" />
         <div className="relative z-10 px-8 md:px-12 text-center md:text-left max-w-3xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -92,8 +92,8 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="text-lg text-muted-foreground mb-8 leading-relaxed"
           >
-            Follow expert-curated roadmaps, complete interactive quizzes, and
-            earn XP as you build your career in tech.
+            Discover best practices in your field, avoid common pitfalls, and
+            grow through curated insights.
           </motion.p>
           {!profile && (
             <motion.div
@@ -148,7 +148,7 @@ export default function Home() {
                     className="group block h-full p-8 bg-card hover:bg-muted/50 border border-border hover:border-emerald-500/50 rounded-3xl transition-all hover:-translate-y-1"
                   >
                     <div className="w-14 h-14 bg-muted border border-border rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition-colors">
-                      <MapIcon className="w-8 h-8" />
+                      <RoadmapIcon name={roadmap.icon} className="w-8 h-8" />
                     </div>
                     <h3 className="text-xl font-bold mb-3 group-hover:text-emerald-500 transition-colors">
                       {roadmap.title}
@@ -172,7 +172,10 @@ export default function Home() {
             {roadmaps.length === 0 && (
               <div className="col-span-full py-20 text-center border-2 border-dashed border-border rounded-3xl space-y-6">
                 <div className="w-16 h-16 bg-card rounded-2xl flex items-center justify-center mx-auto">
-                  <MapIcon className="w-8 h-8 text-muted-foreground/30" />
+                  <RoadmapIcon
+                    name="Map"
+                    className="w-8 h-8 text-muted-foreground/30"
+                  />
                 </div>
                 <div>
                   <p className="text-muted-foreground font-medium">

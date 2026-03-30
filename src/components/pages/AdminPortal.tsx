@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import {
   collection,
   addDoc,
-  getDocs,
   query,
   orderBy,
   onSnapshot,
@@ -16,23 +15,189 @@ import { db, handleFirestoreError, OperationType } from "../../firebase";
 import { Roadmap, Article, Quiz, UserProfile } from "../../types";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "../../contexts/UserContext";
+import RoadmapIcon, { AVAILABLE_ROADMAP_ICONS } from "../RoadmapIcon";
 import {
   Plus,
   Trash2,
   Edit3,
-  ChevronRight,
-  LayoutDashboard,
+  ChevronDown,
+  Copy,
+  Check,
   Map,
   BookOpen,
   HelpCircle,
   Save,
   X,
   AlertCircle,
-  Database,
+  Upload,
 } from "lucide-react";
 
+type ImportedQuizQuestion = {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+};
+
+type ImportedArticle = {
+  title: string;
+  content: string;
+  points: number;
+  order: number;
+  level?: number;
+  quiz?: {
+    questions: ImportedQuizQuestion[];
+  };
+};
+
+type ImportedRoadmap = {
+  title: string;
+  description: string;
+  icon?: string;
+  order: number;
+  articles?: ImportedArticle[];
+};
+
+const SAMPLE_IMPORT_JSON = {
+  roadmaps: [
+    {
+      title: "React Mastery",
+      description: "Master React from fundamentals to advanced patterns.",
+      icon: "FaReact",
+      order: 1,
+      articles: [
+        {
+          title: "Introduction to React",
+          content:
+            "# Welcome to React\n\nBuild UIs with **components**.\n\n## Why React?\n\n- Declarative syntax\n- Component-based architecture\n- Huge ecosystem\n\n```jsx\nfunction Hello() {\n  return <h1>Hello, world!</h1>;\n}\n```\n\n> Markdown is fully supported in article content.",
+          points: 50,
+          order: 1,
+          level: 1,
+          quiz: {
+            questions: [
+              {
+                question: "Who maintains React?",
+                options: ["Google", "Meta", "Microsoft", "Apple"],
+                correctAnswer: 1,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+};
+
+const SAMPLE_IMPORT_JSON_TEXT = JSON.stringify(SAMPLE_IMPORT_JSON, null, 2);
+
+const normalizeTitle = (value: string) => value.trim().toLowerCase();
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const parseImportRoadmaps = (input: unknown): ImportedRoadmap[] => {
+  const source = Array.isArray(input)
+    ? input
+    : isObject(input) && Array.isArray(input.roadmaps)
+      ? input.roadmaps
+      : null;
+
+  if (!source) {
+    throw new Error(
+      "Invalid JSON format. Use either an array of roadmaps or an object with a 'roadmaps' array.",
+    );
+  }
+
+  return source.map((entry, roadmapIndex) => {
+    if (!isObject(entry)) {
+      throw new Error(`Roadmap at index ${roadmapIndex} is not an object.`);
+    }
+
+    const title = String(entry.title || "").trim();
+    const description = String(entry.description || "").trim();
+    const icon = String(entry.icon || "Map").trim();
+    const order = Number(entry.order ?? roadmapIndex + 1);
+
+    if (!title) {
+      throw new Error(`Roadmap at index ${roadmapIndex} is missing 'title'.`);
+    }
+
+    if (!description) {
+      throw new Error(`Roadmap '${title}' is missing 'description'.`);
+    }
+
+    const rawArticles = Array.isArray(entry.articles) ? entry.articles : [];
+    const articles: ImportedArticle[] = rawArticles.map(
+      (article, articleIdx) => {
+        if (!isObject(article)) {
+          throw new Error(
+            `Article at index ${articleIdx} in roadmap '${title}' is not an object.`,
+          );
+        }
+
+        const articleTitle = String(article.title || "").trim();
+        const content = String(article.content || "").trim();
+        const points = Number(article.points ?? 50);
+        const articleOrder = Number(article.order ?? articleIdx + 1);
+        const level = Number(article.level ?? 1);
+
+        if (!articleTitle) {
+          throw new Error(
+            `Article at index ${articleIdx} in roadmap '${title}' is missing 'title'.`,
+          );
+        }
+
+        if (!content) {
+          throw new Error(
+            `Article '${articleTitle}' in roadmap '${title}' is missing 'content'.`,
+          );
+        }
+
+        const quiz =
+          isObject(article.quiz) && Array.isArray(article.quiz.questions)
+            ? {
+                questions: article.quiz.questions.map(
+                  (question, questionIdx) => {
+                    if (!isObject(question)) {
+                      throw new Error(
+                        `Quiz question ${questionIdx + 1} in article '${articleTitle}' is invalid.`,
+                      );
+                    }
+
+                    return {
+                      question: String(question.question || "").trim(),
+                      options: Array.isArray(question.options)
+                        ? question.options.map((opt) => String(opt))
+                        : ["", "", "", ""],
+                      correctAnswer: Number(question.correctAnswer ?? 0),
+                    } as ImportedQuizQuestion;
+                  },
+                ),
+              }
+            : undefined;
+
+        return {
+          title: articleTitle,
+          content,
+          points,
+          order: articleOrder,
+          level,
+          quiz,
+        };
+      },
+    );
+
+    return {
+      title,
+      description,
+      icon,
+      order,
+      articles,
+    };
+  });
+};
+
 export default function AdminPortal() {
-  const { profile, loading: authLoading } = useUser();
+  const { profile } = useUser();
   const [activeTab, setActiveTab] = useState<
     "roadmaps" | "articles" | "quizzes"
   >("roadmaps");
@@ -41,7 +206,21 @@ export default function AdminPortal() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importRoadmaps, setImportRoadmaps] = useState<
+    ImportedRoadmap[] | null
+  >(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [duplicateRoadmapTitles, setDuplicateRoadmapTitles] = useState<
+    string[]
+  >([]);
+  const [allowExistingRoadmapImport, setAllowExistingRoadmapImport] =
+    useState(false);
+  const [isSampleCopied, setIsSampleCopied] = useState(false);
+  const [isIconMenuOpen, setIsIconMenuOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const isAdmin = profile?.role === "admin";
@@ -167,152 +346,155 @@ export default function AdminPortal() {
     }
   };
 
-  const seedData = async () => {
-    setIsSeeding(true);
+  const resetImportState = () => {
+    setImportRoadmaps(null);
+    setImportFileName("");
+    setImportStatus(null);
+    setImportError(null);
+    setDuplicateRoadmapTitles([]);
+    setAllowExistingRoadmapImport(false);
+    setIsSampleCopied(false);
+  };
+
+  const closeImportModal = () => {
+    setIsImportModalOpen(false);
+    resetImportState();
+  };
+
+  const handleImportFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    setImportStatus(null);
+    setImportError(null);
+
+    if (!file) {
+      setImportRoadmaps(null);
+      setImportFileName("");
+      setDuplicateRoadmapTitles([]);
+      setAllowExistingRoadmapImport(false);
+      return;
+    }
+
     try {
-      const roadmapsData = [
-        {
-          title: "React Mastery",
-          description:
-            "Master the most popular frontend library from basics to advanced patterns.",
-          icon: "Atom",
-          order: 1,
-          articles: [
-            {
-              title: "Introduction to React",
-              content:
-                "# Welcome to React\nReact is a declarative, efficient, and flexible JavaScript library for building user interfaces.\n\nHere is a simple component:\n\n```jsx\nfunction Welcome() {\n  return <h1>Hello, World!</h1>;\n}\n```",
-              points: 50,
-              order: 1,
-              level: 1,
-              quiz: {
-                questions: [
-                  {
-                    question:
-                      "What is the correct way to define a component in React?\n\n```jsx\nfunction MyComp() { ... }\n```",
-                    options: [
-                      "Function component",
-                      "Class component",
-                      "Object component",
-                      "Array component",
-                    ],
-                    correctAnswer: 0,
-                  },
-                  {
-                    question: "Who developed React?",
-                    options: [
-                      "Google",
-                      "Meta (Facebook)",
-                      "Microsoft",
-                      "Apple",
-                    ],
-                    correctAnswer: 1,
-                  },
-                ],
-              },
-            },
-            {
-              title: "JSX and Components",
-              content:
-                '# JSX & Components\nComponents are the building blocks of React applications.\n\nExample of JSX:\n\n```jsx\nconst element = <h1 className="greeting">Hello!</h1>;\n```',
-              points: 100,
-              order: 2,
-              level: 1,
-              quiz: {
-                questions: [
-                  {
-                    question: "What does JSX stand for?",
-                    options: [
-                      "JavaScript XML",
-                      "Java Syntax Extension",
-                      "JSON X-platform",
-                      "JavaScript X-ray",
-                    ],
-                    correctAnswer: 0,
-                  },
-                ],
-              },
-            },
-          ],
-        },
-        {
-          title: "TypeScript Essentials",
-          description:
-            "Learn how to write type-safe JavaScript and scale your applications.",
-          icon: "Code",
-          order: 2,
-          articles: [
-            {
-              title: "Basic Types",
-              content:
-                "# Basic Types\nLearn about string, number, boolean, and arrays.",
-              points: 50,
-              order: 1,
-              level: 1,
-              quiz: {
-                questions: [
-                  {
-                    question: "Which is NOT a basic TS type?",
-                    options: ["string", "number", "float", "boolean"],
-                    correctAnswer: 2,
-                  },
-                ],
-              },
-            },
-          ],
-        },
-        {
-          title: "Backend Engineering",
-          description:
-            "Explore server-side development, APIs, and database management.",
-          icon: "Server",
-          order: 3,
-          articles: [
-            {
-              title: "Node.js Basics",
-              content: "# Node.js\nJavaScript on the server.",
-              points: 50,
-              order: 1,
-              level: 1,
-              quiz: {
-                questions: [
-                  {
-                    question: "What engine does Node.js use?",
-                    options: ["V8", "SpiderMonkey", "Chakra", "Nitro"],
-                    correctAnswer: 0,
-                  },
-                ],
-              },
-            },
-          ],
-        },
-      ];
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as unknown;
+      const imported = parseImportRoadmaps(parsed);
 
-      for (const r of roadmapsData) {
-        const { articles: roadmapArticles, ...roadmapInfo } = r;
-        const rDoc = await addDoc(collection(db, "roadmaps"), roadmapInfo);
+      const existingTitles = new Set(
+        roadmaps.map((r) => normalizeTitle(r.title)),
+      );
+      const duplicates = imported
+        .filter((r) => existingTitles.has(normalizeTitle(r.title)))
+        .map((r) => r.title);
 
-        if (roadmapArticles) {
-          for (const a of roadmapArticles) {
-            const { quiz, ...articleInfo } = a;
-            const aDoc = await addDoc(collection(db, "articles"), {
-              ...articleInfo,
-              roadmapId: rDoc.id,
+      setImportRoadmaps(imported);
+      setImportFileName(file.name);
+      setDuplicateRoadmapTitles(duplicates);
+      setAllowExistingRoadmapImport(false);
+      setImportStatus(
+        `Loaded ${imported.length} roadmap${imported.length === 1 ? "" : "s"} from ${file.name}.`,
+      );
+    } catch (error) {
+      setImportRoadmaps(null);
+      setImportFileName(file.name);
+      setDuplicateRoadmapTitles([]);
+      setAllowExistingRoadmapImport(false);
+      setImportError(
+        error instanceof Error ? error.message : "Failed to parse import file.",
+      );
+    }
+  };
+
+  const handleImportData = async () => {
+    if (!importRoadmaps || importRoadmaps.length === 0) {
+      setImportError("Select a valid JSON file before importing.");
+      return;
+    }
+
+    if (duplicateRoadmapTitles.length > 0 && !allowExistingRoadmapImport) {
+      setImportError(
+        "Some roadmap titles already exist. Confirm that you want to append content to existing roadmaps.",
+      );
+      return;
+    }
+
+    setImportError(null);
+    setImportStatus(null);
+    setIsImporting(true);
+
+    try {
+      const roadmapLookup = new globalThis.Map(
+        roadmaps.map((r) => [normalizeTitle(r.title), r]),
+      );
+
+      let createdRoadmaps = 0;
+      let reusedRoadmaps = 0;
+      let createdArticles = 0;
+      let createdQuizzes = 0;
+
+      for (const roadmap of importRoadmaps) {
+        const roadmapTitleKey = normalizeTitle(roadmap.title);
+        const existingRoadmap = roadmapLookup.get(roadmapTitleKey);
+
+        let roadmapId = existingRoadmap?.id;
+
+        if (!roadmapId) {
+          const roadmapDoc = await addDoc(collection(db, "roadmaps"), {
+            title: roadmap.title,
+            description: roadmap.description,
+            icon: roadmap.icon || "Map",
+            order: roadmap.order,
+          });
+
+          roadmapId = roadmapDoc.id;
+          createdRoadmaps += 1;
+        } else {
+          reusedRoadmaps += 1;
+        }
+
+        for (const article of roadmap.articles || []) {
+          const articleDoc = await addDoc(collection(db, "articles"), {
+            roadmapId,
+            title: article.title,
+            content: article.content,
+            points: article.points,
+            order: article.order,
+            level: article.level ?? 1,
+          });
+          createdArticles += 1;
+
+          if (article.quiz?.questions?.length) {
+            await addDoc(collection(db, "quizzes"), {
+              articleId: articleDoc.id,
+              questions: article.quiz.questions,
             });
-
-            if (quiz) {
-              await addDoc(collection(db, "quizzes"), {
-                ...quiz,
-                articleId: aDoc.id,
-              });
-            }
+            createdQuizzes += 1;
           }
         }
       }
+
+      setImportStatus(
+        `Import complete. Added ${createdRoadmaps} roadmap${createdRoadmaps === 1 ? "" : "s"}, reused ${reusedRoadmaps}, added ${createdArticles} article${createdArticles === 1 ? "" : "s"}, and ${createdQuizzes} quiz${createdQuizzes === 1 ? "" : "zes"}.`,
+      );
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, "seed");
+      setImportError(
+        error instanceof Error ? error.message : "Import failed unexpectedly.",
+      );
     } finally {
-      setIsSeeding(false);
+      setIsImporting(false);
+    }
+  };
+
+  const handleCopySampleJson = async () => {
+    try {
+      await navigator.clipboard.writeText(SAMPLE_IMPORT_JSON_TEXT);
+      setIsSampleCopied(true);
+      window.setTimeout(() => {
+        setIsSampleCopied(false);
+      }, 1800);
+    } catch {
+      setImportError("Could not copy sample JSON. Please copy it manually.");
     }
   };
 
@@ -343,7 +525,7 @@ export default function AdminPortal() {
       setRoadmapForm({
         title: item.title,
         description: item.description,
-        icon: item.icon,
+        icon: item.icon || "Map",
         order: item.order,
       });
     } else if (type === "articles") {
@@ -381,18 +563,20 @@ export default function AdminPortal() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={seedData}
-            disabled={isSeeding}
+            onClick={() => {
+              resetImportState();
+              setIsImportModalOpen(true);
+            }}
+            disabled={isImporting}
             className="flex items-center gap-2 bg-muted hover:bg-muted/80 text-foreground px-5 py-2.5 rounded-xl font-bold transition-all disabled:opacity-50"
           >
-            <Database className="w-5 h-5" />{" "}
-            {isSeeding ? "Seeding..." : "Seed Data"}
+            <Upload className="w-5 h-5" /> Import data
           </button>
           <button
             onClick={() => setIsAdding(true)}
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-5 py-2.5 rounded-xl font-bold transition-all active:scale-95"
           >
-            <Plus className="w-5 h-5" /> Add New {activeTab.slice(0, -1)}
+            <Plus className="w-5 h-5" /> Add new {activeTab.slice(0, -1)}
           </button>
         </div>
       </div>
@@ -441,7 +625,7 @@ export default function AdminPortal() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center text-emerald-500">
-                      <Map className="w-6 h-6" />
+                      <RoadmapIcon name={r.icon} className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="font-bold">{r.title}</h3>
@@ -468,8 +652,8 @@ export default function AdminPortal() {
               ))
             ) : (
               <div className="p-12 text-center text-muted-foreground italic">
-                No roadmaps found. Click "Seed Data" or "Add New" to get
-                started.
+                No roadmaps found. Click "Import data" or "Add new roadmap" to
+                get started.
               </div>
             ))}
 
@@ -561,10 +745,151 @@ export default function AdminPortal() {
         </div>
       </div>
 
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-90 flex items-center justify-center p-4 bg-background/90 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="w-full max-w-3xl bg-card border border-border rounded-3xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-border flex items-center justify-between">
+                <h3 className="font-bold text-xl">Import data (JSON)</h3>
+                <button
+                  onClick={closeImportModal}
+                  className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
+                      Sample JSON format
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={handleCopySampleJson}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      {isSampleCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy JSON
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre className="bg-muted border border-border rounded-xl p-4 text-xs overflow-auto max-h-52">
+                    {SAMPLE_IMPORT_JSON_TEXT}
+                  </pre>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                    Choose JSON file
+                  </label>
+                  <div className="flex items-center gap-3 bg-muted border border-border rounded-xl px-3 py-2.5">
+                    <label
+                      htmlFor="import-json-file"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm font-semibold cursor-pointer hover:bg-card/80 transition-colors"
+                    >
+                      <Upload className="w-4 h-4" /> Choose File
+                    </label>
+                    <span className="text-sm text-muted-foreground truncate">
+                      {importFileName || "No file chosen"}
+                    </span>
+                    <input
+                      id="import-json-file"
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleImportFileChange}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
+                {importStatus && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm text-emerald-500">
+                    {importStatus}
+                  </div>
+                )}
+
+                {duplicateRoadmapTitles.length > 0 && (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                    <p className="text-sm text-amber-400 font-semibold">
+                      Warning: {duplicateRoadmapTitles.length} roadmap title
+                      {duplicateRoadmapTitles.length === 1 ? "" : "s"} already
+                      exist.
+                    </p>
+                    <p className="text-xs text-amber-300/90">
+                      Importing will append articles/quizzes to the existing
+                      roadmap instead of creating a new one.
+                    </p>
+                    <div className="text-xs text-amber-200/80">
+                      Existing titles: {duplicateRoadmapTitles.join(", ")}
+                    </div>
+                    <label className="flex items-start gap-2 text-sm text-amber-100">
+                      <input
+                        type="checkbox"
+                        checked={allowExistingRoadmapImport}
+                        onChange={(e) =>
+                          setAllowExistingRoadmapImport(e.target.checked)
+                        }
+                        className="mt-0.5 w-4 h-4 accent-emerald-500"
+                      />
+                      I understand and want to continue importing into existing
+                      roadmaps.
+                    </label>
+                  </div>
+                )}
+
+                {importError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+                    {importError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeImportModal}
+                    className="px-4 py-2 rounded-xl border border-border text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportData}
+                    disabled={
+                      isImporting ||
+                      !importRoadmaps ||
+                      (duplicateRoadmapTitles.length > 0 &&
+                        !allowExistingRoadmapImport)
+                    }
+                    className="px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 font-bold disabled:opacity-50"
+                  >
+                    {isImporting ? "Importing..." : "Import data"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Add Modals */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/90 backdrop-blur-sm">
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-background/90 backdrop-blur-sm">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -619,11 +944,63 @@ export default function AdminPortal() {
                             description: e.target.value,
                           })
                         }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-[100px]"
+                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-25"
                         placeholder="Describe the learning path..."
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                          Icon
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsIconMenuOpen((prev) => !prev)}
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 flex items-center justify-between focus:outline-none focus:border-emerald-500 transition-colors"
+                          >
+                            <span className="flex items-center gap-2 text-sm">
+                              <RoadmapIcon
+                                name={roadmapForm.icon}
+                                className="w-5 h-5"
+                              />
+                              <span>{roadmapForm.icon}</span>
+                            </span>
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          </button>
+
+                          {isIconMenuOpen && (
+                            <div className="absolute z-20 mt-2 w-full bg-card border border-border rounded-xl shadow-xl max-h-64 overflow-y-auto p-2">
+                              <div className="grid grid-cols-1 gap-1">
+                                {AVAILABLE_ROADMAP_ICONS.map((iconName) => (
+                                  <button
+                                    key={iconName}
+                                    type="button"
+                                    onClick={() => {
+                                      setRoadmapForm({
+                                        ...roadmapForm,
+                                        icon: iconName,
+                                      });
+                                      setIsIconMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                                      roadmapForm.icon === iconName
+                                        ? "bg-emerald-500/15 text-emerald-500"
+                                        : "hover:bg-muted"
+                                    }`}
+                                  >
+                                    <RoadmapIcon
+                                      name={iconName}
+                                      className="w-4 h-4"
+                                    />
+                                    <span className="text-sm">{iconName}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <label className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
                           Order
@@ -711,7 +1088,7 @@ export default function AdminPortal() {
                             content: e.target.value,
                           })
                         }
-                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-[200px] font-mono text-sm"
+                        className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-50 font-mono text-sm"
                         placeholder="Write your article content here... Use ```lang for code blocks."
                       />
                     </div>
@@ -842,7 +1219,7 @@ export default function AdminPortal() {
                                 qs[qIdx].question = e.target.value;
                                 setQuizForm({ ...quizForm, questions: qs });
                               }}
-                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-[80px] font-mono text-sm"
+                              className="w-full bg-muted border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors min-h-20 font-mono text-sm"
                               placeholder="e.g. What is the output of `console.log(typeof [])`?"
                             />
                           </div>
